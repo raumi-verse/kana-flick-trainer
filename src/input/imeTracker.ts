@@ -1,16 +1,18 @@
 /**
  * Wraps a text input that receives text from the phone's own IME (Gboard 12-key, iOS Kana).
  *
- * Clearing an <input> while the IME is composing is unreliable (Gboard may re-insert the old
- * composition). So after an item is completed we don't clear immediately: we remember a
- * baseline offset and only look at text after it. The field is actually cleared once the
- * composition ends (Enter / 確定) or, as a last resort, when it gets too long.
+ * After an item is completed the field is cleared right away, even mid-composition. Some IMEs
+ * (Gboard) may re-insert the old composition afterwards; to cope with that we remember the
+ * consumed text and, if the next value starts with it again, treat it as a baseline offset
+ * that is ignored and dropped once the composition ends.
  */
 export type ImeLogger = (msg: string) => void;
 
 export class ImeTracker {
   private baseline = 0;
   private composing = false;
+  /** Text consumed while composing, which the IME might re-insert. */
+  private stale = '';
 
   readonly el: HTMLInputElement;
   private onChange: (typed: string) => void;
@@ -36,12 +38,19 @@ export class ImeTracker {
     });
     el.addEventListener('compositionend', (e) => {
       this.composing = false;
+      this.stale = '';
       this.log(`compend data="${e.data}" value="${el.value}"`);
       // Drop already-consumed text now that it is safe to edit the value.
       setTimeout(() => this.compact(), 0);
     });
     el.addEventListener('input', (e) => {
       const ie = e as InputEvent;
+      if (this.stale) {
+        // Fresh typing after a clear arrives one kana at a time, so a longer first value that
+        // starts with the consumed text can only be the IME re-inserting it.
+        if (el.value.length > 1 && el.value.startsWith(this.stale)) this.baseline = this.stale.length;
+        this.stale = '';
+      }
       if (el.value.length < this.baseline) this.baseline = el.value.length;
       this.log(`input type=${ie.inputType} composing=${ie.isComposing} value="${el.value}"`);
       this.onChange(this.typed());
@@ -57,14 +66,10 @@ export class ImeTracker {
 
   /** Mark everything typed so far as consumed. */
   consume(): void {
-    if (!this.composing) {
-      this.el.value = '';
-      this.baseline = 0;
-    } else {
-      this.baseline = this.el.value.length;
-      if (this.baseline > 40) this.hardReset();
-    }
-    this.log(`consume composing=${this.composing} baseline=${this.baseline}`);
+    this.stale = this.composing ? this.el.value : '';
+    this.el.value = '';
+    this.baseline = 0;
+    this.log(`consume composing=${this.composing} stale="${this.stale}"`);
   }
 
   private compact(): void {
@@ -80,6 +85,7 @@ export class ImeTracker {
     this.el.value = '';
     this.baseline = 0;
     this.composing = false;
+    this.stale = '';
     requestAnimationFrame(() => this.el.focus());
     this.log('hardReset');
   }

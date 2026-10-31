@@ -87,6 +87,12 @@ export class DrillSession {
   }
 
   start(): void {
+    this.next(true);
+    this.tracker.focus();
+  }
+
+  /** The clock (and the 60s countdown) only starts with the first keypress. */
+  private startClock(): void {
     this.sessionStart = performance.now();
     if (this.cfg.timeLimitMs) {
       this.timer = window.setInterval(() => {
@@ -94,8 +100,6 @@ export class DrillSession {
         if (performance.now() - this.sessionStart >= this.cfg.timeLimitMs!) this.finish();
       }, 250);
     }
-    this.next(true);
-    this.tracker.focus();
   }
 
   private next(first = false): void {
@@ -115,6 +119,7 @@ export class DrillSession {
 
   private onInput(typed: string): void {
     if (this.finished) return;
+    if (!this.sessionStart && typed) this.startClock();
     if (!this.itemStart && typed) this.itemStart = performance.now();
     const target = normalize(this.item.text);
     const m = match(target, typed);
@@ -178,7 +183,8 @@ export class DrillSession {
     const s = this.summary();
     let txt = `${s.items} done · ${Math.round(s.accuracy * 100)}%`;
     if (this.cfg.timeLimitMs) {
-      const left = Math.max(0, this.cfg.timeLimitMs - (performance.now() - this.sessionStart));
+      const elapsed = this.sessionStart ? performance.now() - this.sessionStart : 0;
+      const left = Math.max(0, this.cfg.timeLimitMs - elapsed);
       txt += ` · ${Math.ceil(left / 1000)}s`;
     } else if (s.cpm) {
       txt += ` · ${s.cpm}/min`;
