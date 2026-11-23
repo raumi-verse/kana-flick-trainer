@@ -91,6 +91,7 @@ const TAB_LABEL: Record<Tab, string> = { home: 'Practice', stats: 'Stats', setti
 
 function shell(tab: Tab, title: string, body: string): void {
   session = null;
+  app.className = 'shell';
   const who = profile === 'guest' ? 'Guest' : 'Me';
   app.innerHTML = `
     <header class="top">
@@ -189,11 +190,13 @@ function home(): void {
 }
 
 function startDrill(cfg: DrillConfig): void {
+  app.className = '';
   session = new DrillSession(app, cfg, (s) => (s ? summary(cfg, s) : home()));
   session.start();
 }
 
 function summary(cfg: DrillConfig, s: SessionSummary): void {
+  app.className = '';
   app.innerHTML = `
     <main class="summary">
       <p class="eyebrow">${cfg.title}</p>
