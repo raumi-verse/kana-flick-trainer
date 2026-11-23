@@ -25,7 +25,11 @@ interface Data {
   settings: Settings;
 }
 
-const KEY = 'kana-flick-trainer:v1';
+export type Profile = 'me' | 'guest';
+
+// The main profile keeps the original key so existing stats carry over.
+const STORE_KEYS: Record<Profile, string> = { me: 'kana-flick-trainer:v1', guest: 'kana-flick-trainer:guest' };
+const PROFILE_KEY = 'kana-flick-trainer:profile';
 
 const defaults = (): Data => ({
   chars: {},
@@ -33,9 +37,9 @@ const defaults = (): Data => ({
   settings: { hint: 'onMiss', debug: false, sets: ['あ', 'か', 'さ'] },
 });
 
-function load(): Data {
+function load(key: string): Data {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return defaults();
     const d = JSON.parse(raw) as Partial<Data>;
     const def = defaults();
@@ -49,10 +53,43 @@ function load(): Data {
   }
 }
 
-export const data: Data = load();
+function storedProfile(): Profile {
+  try {
+    return localStorage.getItem(PROFILE_KEY) === 'guest' ? 'guest' : 'me';
+  } catch {
+    return 'me';
+  }
+}
+
+export let profile: Profile = storedProfile();
+/** Live binding: reassigned when the profile is switched. */
+export let data: Data = load(STORE_KEYS[profile]);
 
 export function save(): void {
-  localStorage.setItem(KEY, JSON.stringify(data));
+  try {
+    localStorage.setItem(STORE_KEYS[profile], JSON.stringify(data));
+  } catch {
+    // Storage full or blocked: keep going in memory.
+  }
+}
+
+/** Switch profile. Entering guest always starts from a clean slate, so each visitor gets fresh stats. */
+export function switchProfile(p: Profile): void {
+  if (p === profile) return;
+  save();
+  profile = p;
+  try {
+    localStorage.setItem(PROFILE_KEY, p);
+  } catch {
+    // ignore
+  }
+  if (p === 'guest') {
+    data = defaults();
+    data.settings.hint = 'always';
+    save();
+  } else {
+    data = load(STORE_KEYS.me);
+  }
 }
 
 export function charStat(c: string): CharStat {
