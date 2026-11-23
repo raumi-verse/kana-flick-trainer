@@ -17,7 +17,9 @@ If nothing loads, open the port on Fedora's firewall:
 Live at **https://kana.raumi.dev**: every push to `main` is tested, built and deployed by `.github/workflows/pages.yml`.
 
 ## Modes
-Kana drill (selectable rows, adaptive) · Words · Phrases · 60 s speed run · Weak spots · Stats with a mastery heat-map.
+Kana drill (selectable rows, adaptive) · Words (shown with kanji + reading) · Kanji reading (reading hidden until a miss or tap) · Phrases · 60 s speed run · Weak spots · Stats with a mastery heat-map.
+
+Settings → Profile → **Guest** gives someone borrowing your phone a fresh, separate set of stats; switching back to "Me" restores yours.
 
 ## Dev
 - `npm test`: matcher unit tests (`src/input/match.test.ts`)

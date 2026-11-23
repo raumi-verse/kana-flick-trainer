@@ -5,7 +5,10 @@ import { renderFlickHint } from '../ui/flickHint';
 import { pickRandom, pickWeighted } from './scheduler';
 
 export interface Item {
+  /** What has to be typed (kana). */
   text: string;
+  /** Written form shown as the prompt, with `text` as its reading. */
+  kanji?: string;
   sub?: string;
 }
 
@@ -15,6 +18,8 @@ export interface DrillConfig {
   items: Item[];
   adaptive: boolean;
   timeLimitMs?: number;
+  /** Hide the kana reading of kanji prompts until a mistake or a tap. */
+  hideReading?: boolean;
 }
 
 export interface SessionSummary {
@@ -53,16 +58,22 @@ export class DrillSession {
     this.cfg = cfg;
     this.onFinish = onFinish;
     root.innerHTML = `
-      <header class="bar">
-        <button class="back" aria-label="Back">‹</button>
-        <span class="title">${esc(cfg.title)}</span>
-        <span class="counters"></span>
+      <header class="drill-top">
+        <button class="icon-btn back" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+        <span class="drill-title">${esc(cfg.title)}</span>
+        <span class="pill counters"></span>
       </header>
+      ${cfg.timeLimitMs ? '<div class="timebar"><i></i></div>' : ''}
       <main class="drill">
-        <div class="target" title="Tap for hint"></div>
-        <div class="sub"></div>
+        <div class="prompt" title="Tap for hint">
+          <div class="reading"></div>
+          <div class="target"></div>
+          <div class="sub"></div>
+        </div>
         <div class="typed"></div>
-        <input class="ime" type="text" placeholder="type here with the kana keyboard" />
+        <input class="ime" type="text" placeholder="flick here" />
         <div class="hint"></div>
         <pre class="debug" ${data.settings.debug ? '' : 'hidden'}></pre>
       </main>`;
@@ -76,7 +87,7 @@ export class DrillSession {
     this.tracker = new ImeTracker(this.$<HTMLInputElement>('.ime'), (t) => this.onInput(t), log);
 
     this.$('.back').addEventListener('click', () => this.finish());
-    this.$('.target').addEventListener('click', () => {
+    this.$('.prompt').addEventListener('click', () => {
       this.revealHint = true;
       this.render(this.tracker.typed());
       this.tracker.focus();
@@ -111,7 +122,8 @@ export class DrillSession {
     this.missed = false;
     this.revealHint = false;
     this.errorChars.clear();
-    this.$('.target').textContent = this.item.text;
+    this.$('.target').textContent = this.item.kanji ?? this.item.text;
+    this.$('.target').classList.toggle('long', [...(this.item.kanji ?? this.item.text)].length > 7);
     this.$('.sub').textContent = this.item.sub ?? '';
     this.render(this.tracker.typed());
     this.renderCounters();
@@ -122,7 +134,8 @@ export class DrillSession {
     if (!this.sessionStart && typed) this.startClock();
     if (!this.itemStart && typed) this.itemStart = performance.now();
     const target = normalize(this.item.text);
-    const m = match(target, typed);
+    // Converting to the kanji form with the IME also counts.
+    const m = this.item.kanji && typed.trim() === this.item.kanji ? match(target, target) : match(target, typed);
 
     if (m.status === 'wrong') {
       const c = [...target][m.wrongAt];
@@ -155,15 +168,21 @@ export class DrillSession {
       })
       .join('');
 
-    const showHint =
-      data.settings.hint === 'always' || this.revealHint || (data.settings.hint === 'onMiss' && this.missed);
+    // In reading practice an always-on hint would give the answer away.
+    const always = data.settings.hint === 'always' && !this.cfg.hideReading;
+    const showHint = always || this.revealHint || (data.settings.hint !== 'never' && this.missed);
     const nextChar = target[m.correct];
     this.$('.hint').innerHTML = showHint ? renderFlickHint(nextChar) : '';
+
+    const reading = this.$('.reading');
+    const hidden = !!this.cfg.hideReading && !this.revealHint && !this.missed;
+    reading.textContent = this.item.kanji ? (hidden ? 'tap to show reading' : this.item.text) : '';
+    reading.classList.toggle('hidden', hidden);
     this.root.querySelector('.drill')!.classList.toggle('is-wrong', m.status === 'wrong');
   }
 
   private flash(cls: string): void {
-    const t = this.$('.drill');
+    const t = this.$('.prompt');
     t.classList.remove('ok', 'ok-late');
     void t.offsetWidth;
     t.classList.add(cls);
@@ -186,6 +205,7 @@ export class DrillSession {
       const elapsed = this.sessionStart ? performance.now() - this.sessionStart : 0;
       const left = Math.max(0, this.cfg.timeLimitMs - elapsed);
       txt += ` · ${Math.ceil(left / 1000)}s`;
+      this.$('.timebar i').style.width = `${(left / this.cfg.timeLimitMs) * 100}%`;
     } else if (s.cpm) {
       txt += ` · ${s.cpm}/min`;
     }

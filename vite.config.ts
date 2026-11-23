@@ -18,8 +18,8 @@ export default defineConfig({
         short_name: 'かなFlick',
         description: 'Practise the Japanese 12-key flick keyboard',
         lang: 'ja',
-        theme_color: '#c2410c',
-        background_color: '#f7f5f0',
+        theme_color: '#f2f3f8',
+        background_color: '#f2f3f8',
         display: 'standalone',
         orientation: 'portrait',
         icons: [
